@@ -10,15 +10,19 @@ int main(int argc, char*argv[]){
 
     char *filepath = argv[1];
 
-    printf("Parsing data at filepath: %s\n", filepath);
+    MappedFile mf = map_file(filepath);
 
-    if(process_data(filepath) != 0){
-        fprintf(stderr, "Error processing data at filepath: %s \n", filepath);
-        return EXIT_FAILURE;
-        
+    if(mf.data == NULL){return EXIT_FAILURE;}
 
-    }else{
-        printf("Success: data at %s successfully parsed\n", filepath);
+    printf("Previewing file\n");
+
+    for(int i = 0; i<mf.size;i++){
+        putchar(mf.data[i]);
     }
+
+    printf("End of preview, total size: %zu bytes\n", mf.size);
+
+    unmap_file(&mf);
+    return EXIT_SUCCESS;
 
 }
