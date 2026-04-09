@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -pedantic -g 
 
-fast_parser: src/main.c src/parser.c src/io_core.c src/compute.c
+fast_parser: src/main.c src/parser.c src/io_core.c src/compute.c src/engine.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:

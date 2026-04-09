@@ -2,7 +2,7 @@ import pandas as pd
 import time
 import sys
 
-file_path = 'data/gigantic_test.csv'
+file_path = 'data/test.csv'
 
 try:
     start_time = time.time()

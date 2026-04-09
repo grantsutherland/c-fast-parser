@@ -30,3 +30,21 @@ double get_variance(const ColumnStats *stats, int use_sample_variance){
 
 
 }
+void combine_stats(ColumnStats *global, ColumnStats *local){
+    
+    if(local->count == 0){return;}
+    if(global->count == 0){
+        *global = *local;
+        return;
+    }
+    size_t new_count = global->count + local->count;
+
+    double delta = local->mean - global->mean;
+
+    global->mean += delta * ((double)local->count / new_count);
+    global->M2 += local->M2 + (delta * delta * (double)(global->count * local->count) / new_count);
+
+    global->count = new_count;
+
+
+}

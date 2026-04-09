@@ -1,3 +1,4 @@
 fast_parser
 *.o
 .DS_Store
+data/*.csv
