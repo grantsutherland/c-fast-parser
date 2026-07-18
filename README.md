@@ -19,33 +19,62 @@ Bypasses the standard I/O bottlenecks of fopen and fread by utilizing POSIX syst
 
 ## Benchmarks
 
-Benchmarks were run on an Apple Silicon Mac (8 Cores) against a 100-Million Row CSV file (~5GB).
+**Setup:** Apple M4 Pro (10 performance + 4 efficiency cores), 24 GB RAM, macOS 15.6,
+compiled with `-O3 -march=native`. Two datasets: a **tall** file (100M rows x 3 numeric
+columns, 2.38 GB) and a **wide** file (1M rows x 250 columns, 1.25 GB). All figures are
+**warm cache** (data resident in RAM), reported as the **median of 5 runs**. Throughput is
+`file_bytes / seconds`. The task computed for every tool is identical: mean + population
+variance over every column.
 
-### Pandas vs. C Fast Parser (100M Rows)
-| Tool / Language | Execution Time | Speedup |
-| :--- | :--- | :--- |
-| **Python (Pandas)** | ~9.07 seconds | 1.0x Baseline |
-| **Fast Parser (C)** | **~2.01 seconds** | **~4.5x Faster** |
+> Numbers are in-memory parse throughput, not end-to-end from cold disk. On genuinely
+> cold data the 7-8 GB/s figures would be capped by SSD read bandwidth.
 
-### CPU Core Scaling
-The architecture is lock-free, meaning additional CPU cores result in near-linear performance gains. 
+### Tall file — 100M rows (2.38 GB)
+| Tool | Time | GB/s | Speedup vs Pandas |
+| :--- | :--- | :--- | :--- |
+| Pandas (`read_csv` + mean + var) | 9.44 s | 0.25 | 1.0x |
+| DuckDB | 0.83 s | 2.86 | 11.3x |
+| Polars | 0.83 s | 2.88 | 11.4x |
+| **C Fast Parser (8 threads)** | **0.33 s** | **7.31** | **29.0x** |
 
-| Threads | Execution Time (100M Rows) | CPU Utilization |
-| :---: | :--- | :--- |
-| **1 Core** | 13.65s *(Cold Cache)*| 71% |
-| **2 Cores** | 4.98s | 199% |
-| **4 Cores** | 2.78s | 372% |
-| **8 Cores** | ~2.01s | 528% |
+Versus the engines that actually parse-and-aggregate without materializing a DataFrame,
+the C parser is **~2.6x faster than DuckDB** and **~2.5x faster than Polars** on this file.
 
-### Wide-Data Processing
-Tested against a dataset of 1,000,000 rows x 250 columns to verify stack-memory efficiency.
-* **Baseline (Pandas):** ~9.52 seconds
-* **C Fast-Parser:** ~1.28 seconds
-* **Speedup over Pandas:** ~7.25x Faster
+### CPU core scaling (tall file)
+Lock-free partitioning keeps efficiency high across the 10 performance cores. Efficiency is
+`(T1 / Tn) / n`. The single-thread run is memory/fault-stalled (only 75% CPU), so 2 threads
+are briefly super-linear.
+
+| Threads | Time | GB/s | CPU Utilization | Scaling Efficiency |
+| :---: | :--- | :--- | :--- | :---: |
+| 1 | 2.38 s | 1.00 | 75% | 100% |
+| 2 | 1.18 s | 2.02 | 198% | 101% |
+| 4 | 0.63 s | 3.80 | 387% | 95% |
+| 8 | 0.33 s | 7.31 | 742% | 92% |
+
+Threads 1-8 all fit inside the 10 performance cores, so this is near-linear *across P-cores*;
+the 4 efficiency cores add only marginal gains beyond 10 threads.
+
+### Wide file — 1M rows x 250 columns (1.25 GB)
+| Tool | Time | GB/s | Speedup vs Pandas |
+| :--- | :--- | :--- | :--- |
+| Pandas (`read_csv` + mean + var) | 5.34 s | 0.24 | 1.0x |
+| DuckDB | 1.23 s | 1.02 | 4.3x |
+| Polars | 0.70 s | 1.80 | 7.7x |
+| **C Fast Parser (14 threads)** | **0.15 s** | **8.23** | **35.1x** |
+
+*Note on scope:* the parser is a fixed-format numeric kernel — it does not do type
+inference, quoting, nulls, or scientific notation, and it emits only mean/variance rather
+than a queryable table. Part of the speed comes from doing less than a general CSV engine.
+
+### Reproducing
+* C parser: `make && ./fast_parser -t 8 data/gigantic_test.csv`
+* Baselines: `pip install duckdb polars && python benchmark.py data/gigantic_test.csv`
 
 ## Build and Run
 
-This project uses a standard Makefile.
+This project uses a standard Makefile. The build is compiled with `-O3 -march=native`
+for full optimization (this alone is ~4x faster than an unoptimized build).
 
 **To compile:**
 
